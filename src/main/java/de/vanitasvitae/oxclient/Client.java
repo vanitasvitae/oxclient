@@ -1,6 +1,7 @@
 package de.vanitasvitae.oxclient;
 
 import java.io.File;
+import java.security.Security;
 import java.util.Scanner;
 import java.util.Set;
 
@@ -12,14 +13,14 @@ import org.jivesoftware.smack.tcp.XMPPTCPConnection;
 import org.jivesoftware.smackx.ox.OXInstantMessagingManager;
 import org.jivesoftware.smackx.ox.OpenPgpManager;
 import org.jivesoftware.smackx.ox.OpenPgpV4Fingerprint;
-import org.jivesoftware.smackx.ox.PubSubDelegate;
-import org.jivesoftware.smackx.ox.bouncycastle.BCOpenPgpProvider;
-import org.jivesoftware.smackx.ox.bouncycastle.FileBasedBcOpenPgpStore;
-import org.jivesoftware.smackx.ox.callback.SecretKeyBackupSelectionCallback;
-import org.jivesoftware.smackx.ox.callback.SecretKeyRestoreSelectionCallback;
+import org.jivesoftware.smackx.ox.bouncycastle.FileBasedPainlessOpenPgpStore;
+import org.jivesoftware.smackx.ox.bouncycastle.PainlessOpenPgpProvider;
+import org.jivesoftware.smackx.ox.util.KeyBytesAndFingerprint;
+import org.jivesoftware.smackx.ox.util.PubSubDelegate;
 
-import name.neuhalfen.projects.crypto.bouncycastle.openpgp.BouncyGPG;
-import name.neuhalfen.projects.crypto.bouncycastle.openpgp.keys.callbacks.KeyringConfigCallbacks;
+import de.vanitasvitae.crypto.pgpainless.key.SecretKeyRingProtector;
+import de.vanitasvitae.crypto.pgpainless.key.UnprotectedKeysProtector;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.jxmpp.jid.BareJid;
 import org.jxmpp.jid.EntityBareJid;
 import org.jxmpp.jid.impl.JidCreate;
@@ -28,26 +29,33 @@ import org.jxmpp.stringprep.XmppStringprepException;
 public class Client {
 
     private final XMPPTCPConnection connection;
+    private final String username;
 
     public Client(String username, String password) throws XmppStringprepException {
         this.connection = new XMPPTCPConnection(username, password);
+        this.username = username;
     }
 
     public void start() throws Exception {
-        BouncyGPG.registerProvider();
+        Security.removeProvider("BC");
+        Security.addProvider(new BouncyCastleProvider());
         connection.connect().login();
         Scanner scanner = new Scanner(System.in);
 
         BareJid user = connection.getUser().asBareJid();
         OpenPgpManager manager = OpenPgpManager.getInstanceFor(connection);
-        BCOpenPgpProvider provider = new BCOpenPgpProvider(user);
-        FileBasedBcOpenPgpStore store = new FileBasedBcOpenPgpStore(new File("oxstore"), user,
-                KeyringConfigCallbacks.withUnprotectedKeys());
-        provider.setStore(store);
+        SecretKeyRingProtector protector = new UnprotectedKeysProtector();
+        FileBasedPainlessOpenPgpStore store = new FileBasedPainlessOpenPgpStore(new File("oxstore", username), protector);
+        PainlessOpenPgpProvider provider = new PainlessOpenPgpProvider(user, store);
         manager.setOpenPgpProvider(provider);
 
+        Set<OpenPgpV4Fingerprint> av = store.getAvailableKeyPairFingerprints(user);
+        if (av.size() == 1) {
+            store.setPrimaryOpenPgpKeyPairFingerprint(av.iterator().next());
+        }
+
         OXInstantMessagingManager instantManager = OXInstantMessagingManager.getInstanceFor(connection);
-        instantManager.addOpenPgpEncryptedMessageListener((from, originalMessage, decryptedPayload, chat) -> System.out.println("Received OX chat message from " + from + ":\n" +
+        instantManager.addOxMessageListener((chat, originalMessage, decryptedPayload) -> System.out.println("Received OX chat message from " + chat.getJid() + ":\n" +
                 decryptedPayload.<Message.Body>getExtension(
                         Message.Body.ELEMENT, Message.Body.NAMESPACE)
                         .getMessage()));
@@ -62,7 +70,7 @@ public class Client {
             String cmd = scanner.nextLine();
             switch (cmd) {
                 case "publishKeys":
-                    if (provider.primaryOpenPgpKeyPairFingerprint() == null) {
+                    if (provider.getStore().getPrimaryOpenPgpKeyPairFingerprint() == null) {
                         System.out.println("No private key available. Try to generate one using \"generateKey\"");
                         break;
                     }
@@ -95,7 +103,9 @@ public class Client {
                     break outerloop;
 
                 case "generateKey":
-                    provider.createOpenPgpKeyPair();
+                    KeyBytesAndFingerprint kf = provider.generateOpenPgpKeyPair(user);
+                    provider.importSecretKey(user, kf.getBytes());
+                    store.setPrimaryOpenPgpKeyPairFingerprint(kf.getFingerprint());
                     System.out.println("Key generated.");
                     System.out.println(manager.getOurFingerprint());
                     break;
@@ -110,17 +120,17 @@ public class Client {
                     String l = scanner.nextLine();
 
                     if (l.isEmpty()) {
-                        System.out.println(provider.primaryOpenPgpKeyPairFingerprint());
+                        System.out.println(store.getPrimaryOpenPgpKeyPairFingerprint());
                     } else {
                         jid = JidCreate.bareFrom(l);
-                        for (OpenPgpV4Fingerprint f : provider.availableOpenPgpPublicKeysFingerprints(jid)) {
+                        for (OpenPgpV4Fingerprint f : store.getAvailableKeysFingerprints(jid).keySet()) {
                             System.out.println(f);
                         }
                     }
                     break;
 
                 case "encrypt":
-                    if (provider.primaryOpenPgpKeyPairFingerprint() == null) {
+                    if (store.getPrimaryOpenPgpKeyPairFingerprint() == null) {
                         System.out.println("No private key available. Try to generate one using \"generateKey\"");
                         break;
                     }
@@ -129,13 +139,13 @@ public class Client {
                     System.out.println("Enter a message:");
                     String message = scanner.nextLine();
 
-                    instantManager.chatWith(((EntityBareJid) jid).asEntityBareJid())
-                            .send(new Message(jid), message);
+                    manager.getOpenPgpContact(((EntityBareJid) jid).asEntityBareJid())
+                            .send(connection, new Message(jid), message);
                     System.out.println("Message sent.");
                     break;
 
                 case "backup":
-                    if (provider.primaryOpenPgpKeyPairFingerprint() == null) {
+                    if (store.getPrimaryOpenPgpKeyPairFingerprint() == null) {
                         System.out.println("No private key available. Try to generate one using \"generateKey\"");
                         break;
                     }
