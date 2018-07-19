@@ -20,6 +20,8 @@ experimental/build/
 extensions/build/
 gradle/wrapper/gradle-wrapper.properties
 
+out/
+store/
 oxstore/
 
 bin/

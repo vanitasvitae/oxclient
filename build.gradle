@@ -14,7 +14,7 @@ repositories {
 }
 
 ext {
-    smackVersion="4.4.0-alpha1-SNAPSHOT"
+    smackVersion="4.4.0-alpha2-SNAPSHOT"
 }
 
 dependencies {
@@ -23,6 +23,5 @@ dependencies {
     compile "org.igniterealtime.smack:smack-resolver-dnsjava:$smackVersion"
     compile "org.igniterealtime.smack:smack-tcp:$smackVersion"
     compile "org.igniterealtime.smack:smack-openpgp:$smackVersion"
-    compile "org.igniterealtime.smack:smack-openpgp-bouncycastle:$smackVersion"
     compile "org.igniterealtime.smack:smack-experimental:$smackVersion"
 }
