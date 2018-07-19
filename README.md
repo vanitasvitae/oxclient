@@ -18,14 +18,7 @@ cd ox
 # Prepare Smack
 git clone https://github.com/vanitasvitae/Smack.git
 cd Smack
-git checkout c9c22068a3e07d44c88225f04bbf47189caae3f9
-gradle install
-
-# Prepare pgpainless
-cd ..
-git clone https://github.com/vanitasvitae/pgpainless.git
-cd pgpainless
-git checkout 9af42c7231a6837694461e087ef5b3c51e451ef5
+git checkout 12c7b3aebf446c20e4f35f2ca354f7b637486b06
 gradle install
 
 # prepare the client
@@ -37,9 +30,9 @@ gradle build
 
 ### Running the client
 
-The last command above generates the executable `build/libs/cmd-1.0-SNAPSHOT.jar`.
+The last command above generates the executable `build/libs/oxclient-1.0-SNAPSHOT.jar`.
 That can be executed using
 
 ```
-java -jar build/libs/cmd-1.0-SNAPSHOT.jar
+java -jar build/libs/oxclient-1.0-SNAPSHOT.jar
 ```
