@@ -39,7 +39,7 @@ import org.jivesoftware.smackx.ox.OpenPgpSelf;
 import org.jivesoftware.smackx.ox.crypto.OpenPgpProvider;
 import org.jivesoftware.smackx.ox.crypto.PainlessOpenPgpProvider;
 import org.jivesoftware.smackx.ox.exception.InvalidBackupCodeException;
-import org.jivesoftware.smackx.ox.exception.MissingOpenPgpKeyPairException;
+import org.jivesoftware.smackx.ox.exception.MissingOpenPgpKeyException;
 import org.jivesoftware.smackx.ox.exception.MissingUserIdOnKeyException;
 import org.jivesoftware.smackx.ox.exception.NoBackupFoundException;
 import org.jivesoftware.smackx.ox.store.definition.OpenPgpStore;
@@ -78,7 +78,7 @@ public class Client {
         this.store = new FileBasedOpenPgpStore(new File("store" + File.separator + username));
     }
 
-    public void start() throws InterruptedException, XMPPException, SmackException, IOException, PGPException {
+    void start() throws InterruptedException, XMPPException, SmackException, IOException, PGPException {
         connection.connect().login();
         scanner = new Scanner(System.in);
 
@@ -105,7 +105,7 @@ public class Client {
         }
     }
 
-    public void loop() throws Exception {
+    private void loop() throws Exception {
         String line = scanner.nextLine();
         switch (line != null ? line.trim() : "") {
             case "/prepare":
@@ -180,7 +180,7 @@ public class Client {
         System.exit(0);
     }
 
-    public void prepare() throws IOException, PGPException, InterruptedException, PubSubException.NotALeafNodeException, SmackException.NoResponseException, SmackException.NotConnectedException, XMPPException.XMPPErrorException, SmackException.NotLoggedInException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, NoSuchProviderException {
+    private void prepare() throws IOException, PGPException, InterruptedException, PubSubException.NotALeafNodeException, SmackException.NoResponseException, SmackException.NotConnectedException, XMPPException.XMPPErrorException, SmackException.NotLoggedInException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, NoSuchProviderException {
         if (self.hasSecretKeyAvailable()) {
             System.out.println("You already have key " + new OpenPgpV4Fingerprint(self.getSigningKeyRing()).toString() + " available.");
             openPgpManager.announceSupportAndPublish();
@@ -213,7 +213,7 @@ public class Client {
         }
     }
 
-    public void encrypt() throws IOException, InterruptedException, PGPException, SmackException.NotConnectedException, SmackException.NotLoggedInException {
+    private void encrypt() throws IOException, InterruptedException, PGPException, SmackException.NotConnectedException, SmackException.NotLoggedInException {
         System.out.println("Enter the recipients jid:");
         BareJid jid = JidCreate.bareFrom(scanner.nextLine());
         System.out.println("Enter a message:");
@@ -223,7 +223,7 @@ public class Client {
     }
 
 
-    private void backup() throws IOException, MissingOpenPgpKeyPairException, SmackException.FeatureNotSupportedException, SmackException.NotLoggedInException, InterruptedException, XMPPException.XMPPErrorException, PGPException, PubSubException.NotALeafNodeException, SmackException.NotConnectedException, SmackException.NoResponseException {
+    private void backup() throws IOException, MissingOpenPgpKeyException, SmackException.FeatureNotSupportedException, SmackException.NotLoggedInException, InterruptedException, XMPPException.XMPPErrorException, PGPException, PubSubException.NotALeafNodeException, SmackException.NotConnectedException, SmackException.NoResponseException {
         openPgpManager.backupSecretKeyToServer(System.out::println, set -> set);
     }
 }
