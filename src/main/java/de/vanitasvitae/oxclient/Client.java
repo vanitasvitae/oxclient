@@ -32,20 +32,23 @@ import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Presence;
 import org.jivesoftware.smack.tcp.XMPPTCPConnection;
-import org.jivesoftware.smackx.ox.OXInstantMessagingManager;
 import org.jivesoftware.smackx.ox.OpenPgpContact;
 import org.jivesoftware.smackx.ox.OpenPgpManager;
 import org.jivesoftware.smackx.ox.OpenPgpSelf;
 import org.jivesoftware.smackx.ox.crypto.OpenPgpProvider;
 import org.jivesoftware.smackx.ox.crypto.PainlessOpenPgpProvider;
+import org.jivesoftware.smackx.ox.element.SigncryptElement;
 import org.jivesoftware.smackx.ox.exception.InvalidBackupCodeException;
 import org.jivesoftware.smackx.ox.exception.MissingOpenPgpKeyException;
 import org.jivesoftware.smackx.ox.exception.MissingUserIdOnKeyException;
 import org.jivesoftware.smackx.ox.exception.NoBackupFoundException;
 import org.jivesoftware.smackx.ox.store.definition.OpenPgpStore;
+import org.jivesoftware.smackx.ox.store.definition.OpenPgpTrustStore;
 import org.jivesoftware.smackx.ox.store.filebased.FileBasedOpenPgpStore;
 
 import org.jivesoftware.smackx.ox.util.OpenPgpPubSubUtil;
+import org.jivesoftware.smackx.ox_im.OXInstantMessagingManager;
+import org.jivesoftware.smackx.ox_im.OxMessageListener;
 import org.jivesoftware.smackx.pubsub.PubSubException;
 
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -56,6 +59,7 @@ import org.jxmpp.jid.BareJid;
 import org.jxmpp.jid.Jid;
 import org.jxmpp.jid.impl.JidCreate;
 import org.jxmpp.stringprep.XmppStringprepException;
+import org.pgpainless.decryption_verification.OpenPgpMetadata;
 import org.pgpainless.key.OpenPgpV4Fingerprint;
 
 public class Client {
@@ -87,10 +91,13 @@ public class Client {
         openPgpManager.setOpenPgpProvider(provider);
 
         oxManager = OXInstantMessagingManager.getInstanceFor(connection);
-        oxManager.addOxMessageListener((openPgpContact, message, signcryptElement) -> {
-            Message.Body body = signcryptElement.getExtension(Message.Body.ELEMENT, Message.Body.NAMESPACE);
-            if (body != null) {
-                System.out.println(message.getFrom() + ": " + body.getMessage());
+        oxManager.addOxMessageListener(new OxMessageListener() {
+            @Override
+            public void newIncomingOxMessage(OpenPgpContact openPgpContact, Message message, SigncryptElement signcryptElement, OpenPgpMetadata openPgpMetadata) {
+                Message.Body body = signcryptElement.getExtension(Message.Body.ELEMENT, Message.Body.NAMESPACE);
+                if (body != null) {
+                    System.out.println(message.getFrom() + ": " + body.getMessage());
+                }
             }
         });
 
@@ -128,6 +135,10 @@ public class Client {
                 update();
                 break;
 
+            case "/trust":
+                trust();
+                break;
+
             case "/exit":
             case "/quit":
                 exit();
@@ -157,6 +168,26 @@ public class Client {
         BareJid jid = JidCreate.bareFrom(scanner.nextLine());
         OpenPgpContact contact = openPgpManager.getOpenPgpContact(jid.asEntityBareJidIfPossible());
         contact.updateKeys(connection);
+    }
+
+    private void trust() throws IOException, PGPException {
+        System.out.println("Enter a JID:");
+        BareJid jid = JidCreate.bareFrom(scanner.nextLine());
+        OpenPgpContact contact = openPgpManager.getOpenPgpContact(jid.asEntityBareJidIfPossible());
+        for (PGPPublicKeyRing publicKey : contact.getAnyPublicKeys()) {
+            OpenPgpV4Fingerprint fingerprint = new OpenPgpV4Fingerprint(publicKey);
+            System.out.println(fingerprint + " " + contact.getTrust(fingerprint));
+            OpenPgpTrustStore.Trust trust = null;
+            while (trust == null) {
+                try {
+                    trust = OpenPgpTrustStore.Trust.valueOf(scanner.nextLine());
+                } catch (IllegalArgumentException | NullPointerException e) {
+                    System.out.println("Try again.");
+                }
+            }
+            store.setTrust(jid, fingerprint, trust);
+            System.out.println("Key " + fingerprint + " is now " + trust);
+        }
     }
 
     private void fingerprint() throws IOException, PGPException {
